@@ -5,7 +5,7 @@ import uvicorn
 import jwt
 import bcrypt
 from datetime import datetime, timedelta
-
+from apscheduler.schedulers.background import BackgroundScheduler
 # =====================================================================
 # 🔐 1. عصب الأمن السيبراني والتشفير الحديث بالـ bcrypt الصافي (بدون passlib)
 # =====================================================================
@@ -163,3 +163,155 @@ def login(request: LoginRequest):
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="127.0.0.1", port=8001, reload=True)
+
+# ⏰ دالة الأتمتة الذكية: بتشتغل ورا الكواليس وتفحص وتخصم الفواتير تلقائياً بالوقت
+def auto_billing_job():
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        
+        # 1. نفتش عن الفواتير الـ غير مدفوعة (Unpaid أو Overdue) وحان وقت سدادها
+        query = "SELECT invoice_id FROM Invoices WHERE status IN ('Unpaid', 'Overdue') AND next_payment_date <= NOW();"
+        cursor.execute(query)
+        unpaid_invoices = cursor.fetchall()
+        
+        # 2. نلف على الفواتير دي فاتورة فاتورة ونطير نخصمها لايف!
+        for inv in unpaid_invoices:
+            inv_id = inv[0]
+            print(f"⏰ [Auto-Billing] Found pending invoice ID {inv_id}. Processing automated debit...")
+            # بنستدعي نفس دالة الدفع الـ كتبناها قبيل عشان تخلص الخصم بأمان ملوكي
+            process_invoice_payment(invoice_id=inv_id)
+            
+    except Exception as error:
+        print(f"⏰ [Auto-Billing Error] {error}")
+    finally:
+        if cursor: cursor.close()
+        if connection: connection.close()
+
+# 🚦 تشغيل وإطلاق محرك الوقت التلقائي (Background Scheduler) جوة السيرفر
+scheduler = BackgroundScheduler()
+# بنخلي المحرك يصحى براهو (كل 1 دقيقة) وينفذ دالة الفحص والخصم الأوتوماتيكي
+scheduler.add_job(auto_billing_job, 'interval', minutes=1)
+scheduler.start()
+
+
+
+# 🌐 بوابة الدفع الحية: معالجة ودفع الفاتورة يدوياً وخصمها من البنك
+@app.post("/invoices/pay/{invoice_id}")
+def process_invoice_payment(invoice_id: int):
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        
+        # 1️⃣ نسحب بيانات الفاتورة المستهدفة من الخزنة
+        cursor.execute("SELECT account_id, billing_amount, status FROM Invoices WHERE invoice_id = %s;", (invoice_id,))
+        invoice = cursor.fetchone()
+        
+        if invoice is None:
+            return {"error": f"Invoice ID {invoice_id} does not exist!"}
+            
+        account_id = invoice[0]
+        billing_amount = float(invoice[1])
+        status = invoice[2]
+        
+        # لو الفاتورة مدفوعة ومقفلة أصلاً من قبل كدا
+        if status == 'Paid':
+            return {"message": f"Invoice {invoice_id} has already been settled and paid."}
+            
+        # 2️⃣ نطير نـجيب رصيد الحساب البنكي المربوط بالفاتورة دي
+        cursor.execute("SELECT balance FROM Accounts WHERE account_id = %s;", (account_id,))
+        account_res = cursor.fetchone()
+        
+        if account_res is None:
+            return {"error": f"Linked Bank Account ID {account_id} not found!"}
+            
+        current_balance = float(account_res[0])
+        
+        # 🚨 الفحص المالي الصارم: لو القروش ما كافية، اِقفل العملية واِقلبها متأخرة طوالي!
+        if billing_amount > current_balance:
+            cursor.execute("UPDATE Invoices SET status = 'Overdue' WHERE invoice_id = %s;", (invoice_id,))
+            connection.commit()
+            return {"error": "Payment Declined: Insufficient balance. Invoice marked as Overdue."}
+            
+        # 3️⃣ صبّ الخرسانة والعمليات المتتالية جوة عملية مأمنة وموحدة (Atomic Block)
+        # خصم قيمة الفاتورة من حساب البنك الأساسي للزبون
+        cursor.execute("UPDATE Accounts SET balance = balance - %s WHERE account_id = %s;", (billing_amount, account_id))
+        
+        # تسجيل العملية جوة جدول المعاملات التاريخي (الرقم 999 بيمثل حساب تحصيل الفواتير الافتراضي)
+        cursor.execute(
+            "INSERT INTO Transactions (from_account_id, to_account_id, transaction_type, amount) VALUES (%s, %s, 'Bill Payment', %s);",
+            (account_id, 999, billing_amount)
+        )
+        
+        # قلب حالة الفاتورة جوة جدول الفواتير لـ مدفوعة بنجاح
+        cursor.execute("UPDATE Invoices SET status = 'Paid' WHERE invoice_id = %s;", (invoice_id,))
+        
+        # تثبيت وحفظ الشغل كلو في القرص بنجاح ملوكي
+        connection.commit()
+        
+        return {
+            "status": "Success",
+            "message": f"Invoice {invoice_id} successfully paid!",
+            "debited_amount_sdg": billing_amount,
+            "linked_account": account_id,
+            "invoice_new_status": "Paid"
+        }
+        
+    except Exception as error:
+        if connection: 
+            connection.rollback() # فرملة ومحو أي عملية مكسرة لو حصل طشاش في الشبكة
+        return {"error": f"Critical Database Error: {error}"}
+    finally:
+        if cursor: cursor.close()
+        if connection: connection.close()
+
+
+
+
+    # 📦 صندوق ذكي (Model) لعرض بيانات الفواتير بأمان
+class InvoiceResponse(BaseModel):
+    invoice_id: int
+    account_id: int
+    billing_amount: float
+    status: str
+    next_payment_date: datetime
+
+# 🌐 بوابة الإنترنت الجديدة: رابط عرض فواتير العميل لايف من الخزنة
+@app.get("/invoices/{account_id}")
+def view_customer_invoices(account_id: int):
+    connection = None
+    cursor = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        
+        # 🛡️ Parameterized Query مأمن مية المية ضد الـ SQL Injection بالـ %s
+        query = "SELECT invoice_id, account_id, billing_amount, status, next_payment_date FROM Invoices WHERE account_id = %s;"
+        cursor.execute(query, (account_id,))
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return {"account_id": account_id, "message": "No recurring invoices found for this account."}
+            
+        # تحويل الداتا الجاية من الـ Postgres لقائمة JSON منسقة ومفهومة للموبايل
+        invoices_list = []
+        for r in rows:
+            invoices_list.append({
+                "invoice_id": r[0],
+                "account_id": r[1],
+                "billing_amount": float(r[2]),
+                "status": r[3],
+                "next_payment_date": str(r[4])
+            })
+            
+        return {"status": "Success", "account_id": account_id, "invoices": invoices_list}
+        
+    except Exception as error:
+        return {"error": f"Database Error: {error}"}
+    finally:
+        if cursor: cursor.close()
+        if connection: connection.close()
