@@ -15,13 +15,7 @@ ALGORITHM = "HS256"
 
 # Cloud PostgreSQL Connection Layer
 def get_db_connection():
-    connection = psycopg2.connect(
-        host='://render.com',
-        database='microbank_db_g4rs',
-        user='gorashi_user',
-        password='m4pLF12pqPIUE4WAISrezAnicTKMxaK6',
-        sslmode='require'
-    )
+    connection = psycopg2.connect("postgresql://gorashi_user:m4pLF12pqPIUE4WAISrezAnicTKMxaK6@://render.com")
     return connection
 
 # Pydantic Schemas
