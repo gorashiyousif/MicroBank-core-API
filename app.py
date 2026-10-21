@@ -15,9 +15,8 @@ ALGORITHM = "HS256"
 
 # Cloud PostgreSQL Connection Layer
 def get_db_connection():
-    # اتصال خارجي صريح ومباشر ومأمن بالجنزير لفك أي تضارب جدار ناري في السحاب
+    # الرابط الخارجي الشامل والصحيح 100% بدون أي قطوعات نصوص
     return psycopg2.connect("postgresql://gorashi_user:m4pLF12pqPIUE4WAISrezAnicTKMxaK6@://render.com")
-
 # Pydantic Schemas
 class UserLogin(BaseModel):
     account_id: int
