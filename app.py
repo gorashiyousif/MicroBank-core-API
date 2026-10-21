@@ -15,12 +15,8 @@ ALGORITHM = "HS256"
 
 # Cloud PostgreSQL Connection Layer
 def get_db_connection():
-    # بتقرأ الرابط السحابي المأمن دغري من متغيرات البيئة في الـ Render
-    import os
-    db_url = os.environ.get("DATABASE_URL")
-    if not db_url:
-        db_url = "postgresql://gorashi_user:m4pLF12pqPIUE4WAISrezAnicTKMxaK6@://render.com"
-    return psycopg2.connect(db_url)
+    # اتصال خارجي صريح ومباشر ومأمن بالجنزير لفك أي تضارب جدار ناري في السحاب
+    return psycopg2.connect("postgresql://gorashi_user:m4pLF12pqPIUE4WAISrezAnicTKMxaK6@://render.com")
 
 # Pydantic Schemas
 class UserLogin(BaseModel):
