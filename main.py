@@ -12,14 +12,14 @@ app = FastAPI(title="MicroBank Core & Automated Billing Ecosystem", version="202
 SECRET_KEY = "SUPER_SECRET_BANK_KEY_2026"
 ALGORITHM = "HS256"
 
-# Dynamic Environment Injection Layer for Cloud Production
+# Unified Explicit Cloud Connection String
 def get_db_connection():
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
-        # Fallback security route with forced SSL parameter
         db_url = "postgresql://gorashi_user:m4pLF12pqPIUE4WAISrezAnicTKMxaK6@://render.com"
     return psycopg2.connect(db_url)
 
+# Pydantic Schemas Matrix
 class UserLogin(BaseModel):
     account_id: int
     password: str
@@ -29,6 +29,7 @@ class TransferPayload(BaseModel):
     receiver_id: int
     amount: float
 
+# Cryptographic Token Verification Dependency
 def verify_token(authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or malformed authorization header")
@@ -41,11 +42,23 @@ def verify_token(authorization: Optional[str] = Header(None)):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid security signature")
 
+# API Operational Endpoints
 @app.get("/")
 def read_root():
     return {"status": "Active", "system": "MicroBank Core Web API", "engineer": "Gorashi Yousif"}
 
-# Production-Grade PostgreSQL Tuple Mapping Infrastructure
+@app.post("/login")
+def login(payload: UserLogin):
+    # Hardcoded simulation of cryptographic banking access protocols
+    if payload.account_id == 1 and payload.password == "gorashi":
+        token_payload = {
+            "account_id": payload.account_id,
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(minutes=15)
+        }
+        token = jwt.encode(token_payload, SECRET_KEY, algorithm=ALGORITHM)
+        return {"access_token": token, "token_type": "bearer"}
+    raise HTTPException(status_code=401, detail="Invalid banking authentication credentials")
+
 @app.get("/balance/{account_id}")
 def get_balance(account_id: int):
     connection = None
@@ -74,16 +87,21 @@ def get_balance(account_id: int):
 def execute_transfer(payload: TransferPayload, token_data: dict = Depends(verify_token)):
     if payload.sender_id != token_data.get("account_id"):
         raise HTTPException(status_code=403, detail="Unauthorized transaction footprint mutation scope")
+        
     connection = None
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
+        
         cursor.execute("SELECT balance FROM Accounts WHERE account_id = %s FOR UPDATE;", (payload.sender_id,))
         sender = cursor.fetchone()
+        
         if not sender or float(sender[0]) < payload.amount:
             raise HTTPException(status_code=400, detail="Insufficient capital deployment assets")
+            
         cursor.execute("UPDATE Accounts SET balance = balance - %s WHERE account_id = %s;", (payload.amount, payload.sender_id))
         cursor.execute("UPDATE Accounts SET balance = balance + %s WHERE account_id = %s;", (payload.amount, payload.receiver_id))
+        
         connection.commit()
         cursor.close()
         return {"status": "Success", "message": "Atomic asset mutation broadcasted successfully"}
@@ -91,6 +109,30 @@ def execute_transfer(payload: TransferPayload, token_data: dict = Depends(verify
         if connection:
             connection.rollback()
         raise HTTPException(status_code=500, detail=f"Transaction voided via rollback: {str(e)}")
+    finally:
+        if connection:
+            connection.close()
+
+@app.get("/invoices/{account_id}")
+def get_invoices(account_id: int):
+    connection = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT invoice_id, billing_amount, status FROM Invoices WHERE account_id = %s;", (account_id,))
+        invoices = cursor.fetchall()
+        cursor.close()
+        
+        invoice_list = []
+        for inv in invoices:
+            invoice_list.append({
+                "invoice_id": int(inv[0]),
+                "billing_amount": float(inv[1]),
+                "status": str(inv[2])
+            })
+        return {"account_id": account_id, "invoices": invoice_list}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Invoice Query Failure: {str(e)}")
     finally:
         if connection:
             connection.close()
