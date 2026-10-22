@@ -8,11 +8,9 @@ from typing import Optional
 
 app = FastAPI(title="MicroBank Core Live Infrastructure", version="2026.1.0")
 
-# Cloud PostgreSQL Connection Layer (Explicit String)
-def get_db_connection():
-    return psycopg2.connect("postgresql://gorashi_user:m4pLF12pqPIUE4WAISrezAnicTKMxaK6@://render.com")
+# Unified Explicit Cloud Connection String
+CLOUD_DB_URL = "postgresql://gorashi_user:m4pLF12pqPIUE4WAISrezAnicTKMxaK6@://render.com"
 
-# Pydantic Schemas
 class TransferPayload(BaseModel):
     sender_id: int
     receiver_id: int
@@ -22,12 +20,12 @@ class TransferPayload(BaseModel):
 def read_root():
     return {"status": "Active", "system": "MicroBank Core Web API", "engineer": "Gorashi Yousif"}
 
-# Fixed PostgreSQL Tuple Mapping Logic
 @app.get("/balance/{account_id}")
 def get_balance(account_id: int):
     connection = None
     try:
-        connection = get_db_connection()
+        # [FORCE BOUND]: Direct injection to break any server socket routing cache
+        connection = psycopg2.connect(CLOUD_DB_URL)
         cursor = connection.cursor()
         cursor.execute("SELECT account_id, name, balance FROM Accounts WHERE account_id = %s;", (account_id,))
         account = cursor.fetchone()
@@ -36,7 +34,6 @@ def get_balance(account_id: int):
         if not account:
             raise HTTPException(status_code=404, detail="Financial routing node not found")
             
-        # [FIXED]: Mapping explicit indices from PostgreSQL tuple row safely
         return {
             "account_id": int(account[0]), 
             "name": str(account[1]), 
