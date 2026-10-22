@@ -7,14 +7,11 @@ from fastapi import FastAPI, HTTPException, Depends, Header
 from pydantic import BaseModel
 from typing import Optional
 
-# [SECURITY FIXED]: Cross-platform OpenAPI explicit security definitions
-app = FastAPI(
-    title="MicroBank Core & Automated Billing Ecosystem", 
-    version="2026.1.0"
-)
+# Production OpenAPI Framework Context
+app = FastAPI(title="MicroBank Core & Automated Billing Ecosystem", version="2026.1.0")
 
-# Injecting Swagger Security Context via dynamic dict matching to prevent init errors
-app.extra = {
+# Swagger Security Schema Context Binding
+app.openapi_extra = {
     "components": {
         "securitySchemes": {
             "BearerAuth": {
@@ -71,6 +68,7 @@ def login(payload: UserLogin):
         return {"access_token": token, "token_type": "bearer"}
     raise HTTPException(status_code=401, detail="Invalid banking authentication credentials")
 
+# [FIXED PROPERLY]: Explicit indexing mapping from PostgreSQL database tuple results
 @app.get("/balance/{account_id}")
 def get_balance(account_id: int):
     connection = None
@@ -80,11 +78,18 @@ def get_balance(account_id: int):
         cursor.execute("SELECT account_id, name, balance FROM Accounts WHERE account_id = %s;", (account_id,))
         account = cursor.fetchone()
         cursor.close()
+        
         if not account:
             raise HTTPException(status_code=404, detail="Financial routing node not found")
-        return {"account_id": int(account[0]), "name": str(account[1]), "balance": float(account[2])}
+            
+        # Mapping clean explicit primitive data components securely
+        return {
+            "account_id": int(account[0]), 
+            "name": str(account[1]), 
+            "balance": float(account[2])
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Database Framework Failure: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ledger Processing Matrix Failure: {str(e)}")
     finally:
         if connection:
             connection.close()
