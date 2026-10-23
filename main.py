@@ -7,30 +7,16 @@ from fastapi import FastAPI, HTTPException, Depends, Header
 from pydantic import BaseModel
 from typing import Optional
 
-# Production OpenAPI Framework Context
 app = FastAPI(title="MicroBank Core & Automated Billing Ecosystem", version="2026.1.0")
-
-# Swagger Security Schema Context Binding
-app.openapi_extra = {
-    "components": {
-        "securitySchemes": {
-            "BearerAuth": {
-                "type": "http",
-                "scheme": "bearer",
-                "bearerFormat": "JWT",
-                "description": "Enter your signed banking JWT Token in the format: Bearer <Your_Token>"
-            }
-        }
-    },
-    "security": [{"BearerAuth": []}]
-}
 
 SECRET_KEY = "SUPER_SECRET_BANK_KEY_2026"
 ALGORITHM = "HS256"
-CLOUD_DB_URL = "postgresql://gorashi_user:m4pLF12pqPIUE4WAISrezAnicTKMxaK6@://render.com"
 
+# Dynamic Environment Injection Layer for Cloud Production
 def get_db_connection():
-    return psycopg2.connect(CLOUD_DB_URL)
+    # بتقرأ الـ Value الجاهز والمصلح الـ في الـ Render أوتوماتيكياً بدون لخبطة
+    db_url = os.environ.get("DATABASE_URL")
+    return psycopg2.connect(db_url)
 
 class UserLogin(BaseModel):
     account_id: int
@@ -44,7 +30,7 @@ class TransferPayload(BaseModel):
 def verify_token(authorization: Optional[str] = Header(None)):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or malformed authorization header")
-    token = authorization.split(" ")[1] if " " in authorization else authorization
+    token = authorization.split(" ") if " " in authorization else authorization
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
