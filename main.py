@@ -4,26 +4,15 @@ import bcrypt
 import jwt
 import datetime
 from fastapi import FastAPI, HTTPException, Depends, Header
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional
 
-# [SECURITY CONFIGURATION]: OpenAPI architecture initialization for interactive Swagger UI
-app = FastAPI(
-    title="MicroBank Core & Automated Billing Ecosystem", 
-    version="2026.1.0",
-    openapi_extra={
-        "components": {
-            "securitySchemes": {
-                "BearerAuth": {
-                    "type": "http",
-                    "scheme": "bearer",
-                    "bearerFormat": "JWT",
-                    "description": "Enter your signed banking JWT Token in the format: Bearer <Your_Token>"
-                }
-            }
-        }
-    }
-)
+# Clean Framework Initialization
+app = FastAPI(title="MicroBank Core & Automated Billing Ecosystem", version="2026.1.0")
+
+# [SECURITY FIXED]: Native FastAPI Bearer Protocol to force Authorize Button representation
+security_scheme = HTTPBearer()
 
 SECRET_KEY = "SUPER_SECRET_BANK_KEY_2026"
 ALGORITHM = "HS256"
@@ -41,10 +30,9 @@ class TransferPayload(BaseModel):
     receiver_id: int
     amount: float
 
-def verify_token(authorization: Optional[str] = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or malformed authorization header")
-    token = authorization.split(" ")[1]
+# Token Verification Dependency mapped safely via HTTPBearer
+def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security_scheme)):
+    token = credentials.credentials
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
@@ -86,8 +74,7 @@ def get_balance(account_id: int):
         if connection:
             connection.close()
 
-# [SECURED ENDPOINT]: Explicit route protection scope mapping
-@app.post("/transfer", security=[{"BearerAuth": []}])
+@app.post("/transfer")
 def execute_transfer(payload: TransferPayload, token_data: dict = Depends(verify_token)):
     if payload.sender_id != token_data.get("account_id"):
         raise HTTPException(status_code=403, detail="Unauthorized transaction footprint mutation scope")
