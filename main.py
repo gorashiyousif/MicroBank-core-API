@@ -13,10 +13,12 @@ security_scheme = HTTPBearer()
 
 SECRET_KEY = "SUPER_SECRET_BANK_KEY_2026"
 ALGORITHM = "HS256"
-CLOUD_DB_URL = "postgresql://gorashi_user:m4pLF12pqPIUE4WAISrezAnicTKMxaK6@://render.com"
 
+# Pure Cloud Production Dynamic Injection Layer
 def get_db_connection():
-    return psycopg2.connect(CLOUD_DB_URL)
+    # بتقرأ الـ Value الجاهز والمصلح الـ في الـ Render تلقائياً وبدون أي تداخل
+    db_url = os.environ.get("DATABASE_URL")
+    return psycopg2.connect(db_url)
 
 class UserLogin(BaseModel):
     account_id: int
@@ -27,7 +29,6 @@ class TransferPayload(BaseModel):
     receiver_id: int
     amount: float
 
-# [NEW]: Deposit Payload Schema
 class DepositPayload(BaseModel):
     account_id: int
     amount: float
@@ -44,7 +45,7 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security_sc
 def read_root():
     return {"status": "Active", "system": "MicroBank Core Web API", "engineer": "Gorashi Yousif"}
 
-# [NEW ENDPOINT]: Official Deposit and Capital Injection Gate
+# [FIXED PROPERLY]: Explicit indexing database mappings for Deposit Operations
 @app.post("/deposit")
 def execute_deposit(payload: DepositPayload):
     connection = None
@@ -52,14 +53,12 @@ def execute_deposit(payload: DepositPayload):
         connection = get_db_connection()
         cursor = connection.cursor()
         
-        # Check if financial node exists before mutation
-        cursor.execute("SELECT name FROM Accounts WHERE account_id = %s;", (payload.account_id,))
+        cursor.execute("SELECT balance FROM Accounts WHERE account_id = %s;", (payload.account_id,))
         account_exists = cursor.fetchone()
         
         if not account_exists:
             raise HTTPException(status_code=404, detail="Target financial routing node not found")
             
-        # Execute safe atomic deposit mutation directly inside cloud database limits
         cursor.execute("UPDATE Accounts SET balance = balance + %s WHERE account_id = %s;", (payload.amount, payload.account_id))
         connection.commit()
         cursor.close()
@@ -69,7 +68,7 @@ def execute_deposit(payload: DepositPayload):
         }
     except Exception as e:
         if connection: connection.rollback()
-        raise HTTPException(status_code=500, detail=f"Deposit Transaction Voided: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Deposit Operation Core Failure: {str(e)}")
     finally:
         if connection: connection.close()
 
@@ -81,6 +80,7 @@ def login(payload: UserLogin):
         return {"access_token": token, "token_type": "bearer"}
     raise HTTPException(status_code=401, detail="Invalid banking authentication credentials")
 
+# [FIXED PROPERLY]: Explicit Tuple Row Mappings for Balance Auditing
 @app.get("/balance/{account_id}")
 def get_balance(account_id: int):
     connection = None
@@ -90,16 +90,25 @@ def get_balance(account_id: int):
         cursor.execute("SELECT account_id, name, balance FROM Accounts WHERE account_id = %s;", (account_id,))
         account = cursor.fetchone()
         cursor.close()
+        
         if not account:
             raise HTTPException(status_code=404, detail="Financial routing node not found")
-        return {"account_id": int(account[0]), "name": str(account[1]), "balance": float(account[2])}
+            
+        return {
+            "account_id": int(account[0]), 
+            "name": str(account[1]), 
+            "balance": float(account[2])
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ledger Matrix Failure: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Ledger Balance Matrix Failure: {str(e)}")
     finally:
         if connection: connection.close()
 
+# [FIXED PROPERLY]: Explicit Row Matrix Updates for Secured Asset Transfers
 @app.post("/transfer")
 def execute_transfer(payload: TransferPayload, token_data: dict = Depends(verify_token)):
+    if payload.sender_id != token_data.get("account_id"):
+        raise HTTPException(status_code=403, detail="Unauthorized transaction footprint mutation scope")
     connection = None
     try:
         connection = get_db_connection()
@@ -115,6 +124,6 @@ def execute_transfer(payload: TransferPayload, token_data: dict = Depends(verify
         return {"status": "Success", "message": "Atomic asset mutation broadcasted successfully"}
     except Exception as e:
         if connection: connection.rollback()
-        raise HTTPException(status_code=500, detail=f"Transaction voided: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Transaction voided via rollback: {str(e)}")
     finally:
         if connection: connection.close()
