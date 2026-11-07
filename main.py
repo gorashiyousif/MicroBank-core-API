@@ -229,8 +229,8 @@ def execute_invoice_payment(payload: PayInvoicePayload, token_data: dict = Depen
 
         from fastapi.responses import HTMLResponse
 
-# [HACK]: حقن ستارة صفحة الدخول المعزولة الفخمة جوة واجهة الـ Swagger لايف
-@app.get("/docs", include_in_schema=False)
+# [FIXED PROPERLY]: عزل بوابة الدخول في مسار مستقل تماماً عيار 24 لمنع تضارب السيرفر
+@app.get("/login-gateway", include_in_schema=False)
 def custom_swagger_ui():
     html_content = """
     <!DOCTYPE html>
