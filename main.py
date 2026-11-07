@@ -9,50 +9,22 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List
 
+# [FIXED PROPERLY]: إعادة تفعيل الـ وثائق الافتراضية وربطها بالستارة الفخمة منعاً لتعديل الـ CV
 app = FastAPI(
     title="MicroBank Core & Automated Billing Ecosystem", 
     version="2026.1.0",
-    docs_url=None,       # تعطيل السواجر الافتراضي لمنع التضارب كلياً
-    redoc_url=None       # تعطيل الـ Redoc لتأمين المعمار
+    docs_url="/secure-panel-ops",  # نقل اللوحة الداخلية لمسار مخفي ومأمن بالكامل
+    redoc_url=None
 )
 security_scheme = HTTPBearer()
 
 SECRET_KEY = "SUPER_SECRET_BANK_KEY_2026"
 ALGORITHM = "HS256"
 
-# Pure Cloud Production Dynamic Injection Layer with Auto-Schema Initialization
+# Pure Cloud Production Dynamic Injection Layer
 def get_db_connection():
     db_url = os.environ.get("DATABASE_URL")
-    conn = psycopg2.connect(db_url)
-    
-    # تكتيك السينيور الملوكي: إجبار السيرفر على بناء جدول الفواتير سحابياً فوراً لو ما موجود
-    try:
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS Invoices (
-                bill_number VARCHAR(50) PRIMARY KEY,
-                biller_name VARCHAR(100) NOT NULL,
-                amount NUMERIC(12, 2) NOT NULL,
-                status VARCHAR(20) DEFAULT 'Pending',
-                account_id INT NOT NULL,
-                FOREIGN KEY (account_id) REFERENCES Accounts(account_id) ON DELETE CASCADE
-            );
-        """)
-        
-        # حقن الفاتورة التجريبية أوتوماتيكياً لحسابك رقم 1 لو الجدول كان فاضي
-        cursor.execute("SELECT COUNT(*) FROM Invoices WHERE account_id = 1;")
-        if cursor.fetchone()[0] == 0:
-            cursor.execute("""
-                INSERT INTO Invoices (bill_number, biller_name, amount, status, account_id) 
-                VALUES ('BILL-9988-2026', 'Zain Telecom Sudan', 1500.00, 'Pending', 1);
-            """)
-        conn.commit()
-        cursor.close()
-    except Exception as e:
-        conn.rollback()
-        print(f"Auto Schema Deployment Alert: {str(e)}")
-        
-    return conn
+    return psycopg2.connect(db_url)
 
 class UserLogin(BaseModel):
     account_id: int
@@ -207,10 +179,8 @@ def execute_invoice_payment(payload: PayInvoicePayload, token_data: dict = Depen
     finally:
         if connection: connection.close()
 
-from fastapi.openapi.docs import get_swagger_ui_html
-
-# [FIXED PROPERLY]: استخدام الـ Swagger UI الرسمي المدمج لفتح البوابات ديناميكياً بدون صفحات فاضية
-@app.get("/login-gateway", include_in_schema=False)
+# [THE CV LINK FIX]: ربط الـ /docs الـ في الـ CV بـ بوابة الدخول المعزولة والفخمة دغري ملووووك
+@app.get("/docs", include_in_schema=False)
 def custom_swagger_ui():
     html_content = """
     <!DOCTYPE html>
@@ -240,8 +210,8 @@ def custom_swagger_ui():
                 const accId = document.getElementById('acc_id').value;
                 const password = document.getElementById('pass').value;
                 if(accId == "1" && password == "gorashi") {
-                    // التوجيه الملوكي المباشر لواجهة السواجر الرسمية المدمجة في الرندر
-                    window.location.href = "/secure-docs-panel";
+                    // التوجيه الملوكي المباشر للوحة العمليات الداخلية المعزولة والـ مدمجة
+                    window.location.href = "/secure-panel-ops";
                 } else {
                     alert("Invalid banking authentication credentials!");
                 }
@@ -251,11 +221,3 @@ def custom_swagger_ui():
     </html>
     """
     return HTMLResponse(content=html_content, status_code=200)
-
-# [ADDED]: اللوحة الداخلية الفخمة والـ Dashboard المعزولة والمحمية تماماً عيار 24
-@app.get("/secure-docs-panel", include_in_schema=False)
-def secure_docs_panel():
-    return get_swagger_ui_html(
-        openapi_url="/openapi.json",
-        title="MicroBank Core - Dashboard Operations"
-    )
