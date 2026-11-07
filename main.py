@@ -8,7 +8,12 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import Optional, List
 
-app = FastAPI(title="MicroBank Core & Automated Billing Ecosystem", version="2026.1.0")
+app = FastAPI(
+    title="MicroBank Core & Automated Billing Ecosystem", 
+    version="2026.1.0",
+    docs_url=None,       # تكتيك السينيور: تعطيل السواجر الافتراضي كلياً لمنع التضارب
+    redoc_url=None       # تعطيل الـ Redoc لتأمين المعمار
+)
 security_scheme = HTTPBearer()
 
 SECRET_KEY = "SUPER_SECRET_BANK_KEY_2026"
