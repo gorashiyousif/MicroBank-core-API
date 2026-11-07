@@ -221,3 +221,66 @@ def execute_invoice_payment(payload: PayInvoicePayload, token_data: dict = Depen
         raise HTTPException(status_code=500, detail=f"Billing transaction voided via rollback: {str(e)}")
     finally:
         if connection: connection.close()
+
+        from fastapi.responses import HTMLResponse
+
+# [HACK]: حقن ستارة صفحة الدخول المعزولة الفخمة جوة واجهة الـ Swagger لايف
+@app.get("/docs", include_in_schema=False)
+def custom_swagger_ui():
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>MicroBank Core - Secure Secure Login</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://jsdelivr.net">
+        <style>
+            body { margin: 0; padding: 0; background: #f4f6f9; font-family: sans-serif; }
+            #auth-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:#1a233a; display:flex; justify-content:center; align-items:center; z-index:9999; }
+            .login-box { background:#white; padding:40px; border-radius:12px; box-shadow:0 10px 25px rgba(0,0,0,0.3); text-align:center; width:350px; }
+            .login-box h2 { color:#1a233a; margin-bottom:25px; font-weight:bold; }
+            .login-box input { width:100%; padding:12px; margin-bottom:15px; border:1px solid #ccc; border-radius:6px; box-sizing:border-box; font-size:16px; }
+            .login-box button { width:100%; padding:12px; background:#10b981; border:none; color:white; font-size:16px; font-weight:bold; border-radius:6px; cursor:pointer; }
+            .login-box button:hover { background:#059669; }
+        </style>
+    </head>
+    <body>
+        <!-- شاشة القفل والستارة المعزولة -->
+        <div id="auth-overlay">
+            <div class="login-box">
+                <h2>🏛️ MicroBank Core</h2>
+                <input type="number" id="acc_id" placeholder="Account ID (e.g. 1)">
+                <input type="password" id="pass" placeholder="Banking Password">
+                <button onclick="unlockGateway()">Secure Login</button>
+            </div>
+        </div>
+
+        <div id="swagger-ui"></div>
+
+        <script src="https://jsdelivr.net"></script>
+        <script>
+            // كود الجافاسكريبت السينيور المخفي لفتح البوابات ديناميكياً
+            function unlockGateway() {
+                const accId = document.getElementById('acc_id').value;
+                const password = document.getElementById('pass').value;
+                
+                if(accId == "1" && password == "gorashi") {
+                    document.getElementById('auth-overlay').style.display = 'none';
+                    // تشغيل السواجر وبناء البوابات تلقائياً بمجرد البصمة بالصّاح
+                    const ui = SwaggerUIBundle({
+                        url: '/openapi.json',
+                        dom_id: '#swagger-ui',
+                        deepLinking: true,
+                        presets: [SwaggerUIBundle.presets.apis],
+                        layout: "BaseLayout"
+                    });
+                } else {
+                    alert("Invalid banking authentication credentials!");
+                }
+            }
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content, status_code=200)
