@@ -87,7 +87,6 @@ def login(payload: UserLogin):
         token = jwt.encode(token_payload, SECRET_KEY, algorithm=ALGORITHM)
         return {"access_token": token, "token_type": "bearer"}
     raise HTTPException(status_code=401, detail="Invalid banking credentials")
-
 @app.get("/balance/{account_id}")
 def get_balance(account_id: int):
     connection = None
@@ -179,7 +178,6 @@ def execute_invoice_payment(payload: PayInvoicePayload, token_data: dict = Depen
     finally:
         if connection: connection.close()
 
-# [FIXED PROPERLY]: عزل بوابة الدخول في مسار مستقل وصغير لمنع تضارب السيرفر ومطابق للبايثون 100%
 @app.get("/login-gateway", include_in_schema=False)
 def custom_swagger_ui():
     html_content = """
@@ -212,23 +210,24 @@ def custom_swagger_ui():
         <div id="swagger-ui"></div>
         <script src="https://jsdelivr.net"></script>
         <script>
-            function unlockGateway() {const accId = document.getElementById('acc_id').value;
-const password = document.getElementById('pass').value;
-if(accId == "1" && password == "gorashi") {
-document.getElementById('auth-overlay').style.display = 'none';
-SwaggerUIBundle({
-url: '/openapi.json',
-dom_id: '#swagger-ui',
-deepLinking: true,
-presets: [SwaggerUIBundle.presets.apis],
-layout: "BaseLayout"
-});
-} else {
-alert("Invalid banking authentication credentials!");
-}
-}
-
-
-
-"""
-return HTMLResponse(content=html_content,status_code=200)
+            function unlockGateway() {
+                const accId = document.getElementById('acc_id').value;
+                const password = document.getElementById('pass').value;
+                if(accId == "1" && password == "gorashi") {
+                    document.getElementById('auth-overlay').style.display = 'none';
+                    SwaggerUIBundle({
+                        url: '/openapi.json',
+                        dom_id: '#swagger-ui',
+                        deepLinking: true,
+                        presets: [SwaggerUIBundle.presets.apis],
+                        layout: "BaseLayout"
+                    });
+                } else {
+                    alert("Invalid banking authentication credentials!");
+                }
+            }
+        </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content, status_code=200)
