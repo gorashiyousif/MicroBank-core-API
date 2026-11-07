@@ -20,10 +20,39 @@ security_scheme = HTTPBearer()
 SECRET_KEY = "SUPER_SECRET_BANK_KEY_2026"
 ALGORITHM = "HS256"
 
-# Pure Cloud Production Dynamic Injection Layer
+# Pure Cloud Production Dynamic Injection Layer with Auto-Schema Initialization
 def get_db_connection():
     db_url = os.environ.get("DATABASE_URL")
-    return psycopg2.connect(db_url)
+    conn = psycopg2.connect(db_url)
+    
+    # تكتيك السينيور الملوكي: إجبار السيرفر على بناء جدول الفواتير سحابياً فوراً لو ما موجود
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS Invoices (
+                bill_number VARCHAR(50) PRIMARY KEY,
+                biller_name VARCHAR(100) NOT NULL,
+                amount NUMERIC(12, 2) NOT NULL,
+                status VARCHAR(20) DEFAULT 'Pending',
+                account_id INT NOT NULL,
+                FOREIGN KEY (account_id) REFERENCES Accounts(account_id) ON DELETE CASCADE
+            );
+        """)
+        
+        # حقن الفاتورة التجريبية أوتوماتيكياً لحسابك رقم 1 لو الجدول كان فاضي
+        cursor.execute("SELECT COUNT(*) FROM Invoices WHERE account_id = 1;")
+        if cursor.fetchone()[0] == 0:
+            cursor.execute("""
+                INSERT INTO Invoices (bill_number, biller_name, amount, status, account_id) 
+                VALUES ('BILL-9988-2026', 'Zain Telecom Sudan', 1500.00, 'Pending', 1);
+            """)
+        conn.commit()
+        cursor.close()
+    except Exception as e:
+        conn.rollback()
+        print(f"Auto Schema Deployment Alert: {str(e)}")
+        
+    return conn
 
 class UserLogin(BaseModel):
     account_id: int
