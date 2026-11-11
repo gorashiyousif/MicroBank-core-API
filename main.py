@@ -63,18 +63,23 @@ def read_root():
 
 @app.post("/deposit")
 def execute_deposit(payload: DepositPayload):
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Deposit amount must be greater than zero")
     connection = None
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
-        cursor.execute("SELECT balance FROM Accounts WHERE account_id = %s;", (payload.account_id,))
+        cursor.execute("SELECT balance FROM accounts WHERE account_id = %s;", (payload.account_id,))
         account_exists = cursor.fetchone()
         if not account_exists:
             raise HTTPException(status_code=404, detail="Target financial routing node not found")
-        cursor.execute("UPDATE Accounts SET balance = balance + %s WHERE account_id = %s;", (payload.amount, payload.account_id))
+        cursor.execute("UPDATE accounts SET balance = balance + %s WHERE account_id = %s;", (payload.amount, payload.account_id))
         connection.commit()
         cursor.close()
         return {"status": "Success", "message": f"Successfully deposited {payload.amount} SDG"}
+    except HTTPException:
+        if connection: connection.rollback()
+        raise
     except Exception as e:
         if connection: connection.rollback()
         raise HTTPException(status_code=500, detail=f"Deposit Failure: {str(e)}")
@@ -88,18 +93,21 @@ def login(payload: UserLogin):
         token = jwt.encode(token_payload, SECRET_KEY, algorithm=ALGORITHM)
         return {"access_token": token, "token_type": "bearer"}
     raise HTTPException(status_code=401, detail="Invalid banking credentials")
+
 @app.get("/balance/{account_id}")
 def get_balance(account_id: int):
     connection = None
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
-        cursor.execute("SELECT account_id, name, balance FROM Accounts WHERE account_id = %s;", (account_id,))
+        cursor.execute("SELECT account_id, name, balance FROM accounts WHERE account_id = %s;", (account_id,))
         account = cursor.fetchone()
         cursor.close()
         if not account:
             raise HTTPException(status_code=404, detail="Financial node not found")
         return {"account_id": int(account[0]), "name": str(account[1]), "balance": float(account[2])}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Balance Failure: {str(e)}")
     finally:
@@ -109,19 +117,24 @@ def get_balance(account_id: int):
 def execute_transfer(payload: TransferPayload, token_data: dict = Depends(verify_token)):
     if payload.sender_id != token_data.get("account_id"):
         raise HTTPException(status_code=403, detail="Unauthorized footprint mutation scope")
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Transfer amount must be greater than zero")
     connection = None
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
-        cursor.execute("SELECT balance FROM Accounts WHERE account_id = %s FOR UPDATE;", (payload.sender_id,))
+        cursor.execute("SELECT balance FROM accounts WHERE account_id = %s FOR UPDATE;", (payload.sender_id,))
         sender = cursor.fetchone()
         if not sender or float(sender[0]) < payload.amount:
             raise HTTPException(status_code=400, detail="Insufficient capital assets")
-        cursor.execute("UPDATE Accounts SET balance = balance - %s WHERE account_id = %s;", (payload.amount, payload.sender_id))
-        cursor.execute("UPDATE Accounts SET balance = balance + %s WHERE account_id = %s;", (payload.amount, payload.receiver_id))
+        cursor.execute("UPDATE accounts SET balance = balance - %s WHERE account_id = %s;", (payload.amount, payload.sender_id))
+        cursor.execute("UPDATE accounts SET balance = balance + %s WHERE account_id = %s;", (payload.amount, payload.receiver_id))
         connection.commit()
         cursor.close()
         return {"status": "Success", "message": "Atomic asset mutation broadcasted successfully"}
+    except HTTPException:
+        if connection: connection.rollback()
+        raise
     except Exception as e:
         if connection: connection.rollback()
         raise HTTPException(status_code=500, detail=f"Transaction rollback: {str(e)}")
@@ -136,13 +149,15 @@ def get_pending_invoices(account_id: int, token_data: dict = Depends(verify_toke
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
-        cursor.execute("SELECT bill_number, biller_name, amount, status FROM Invoices WHERE account_id = %s AND status = 'Pending';", (account_id,))
+        cursor.execute("SELECT bill_number, biller_name, amount, status FROM invoices WHERE account_id = %s AND status = 'Pending';", (account_id,))
         invoices = cursor.fetchall()
         cursor.close()
         result = []
         for inv in invoices:
             result.append({"bill_number": str(inv[0]), "biller_name": str(inv[1]), "amount": float(inv[2]), "status": str(inv[3])})
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Billing ledger failure: {str(e)}")
     finally:
@@ -156,7 +171,7 @@ def execute_invoice_payment(payload: PayInvoicePayload, token_data: dict = Depen
     try:
         connection = get_db_connection()
         cursor = connection.cursor()
-        cursor.execute("SELECT biller_name, amount, status FROM Invoices WHERE bill_number = %s FOR UPDATE;", (payload.bill_number,))
+        cursor.execute("SELECT biller_name, amount, status FROM invoices WHERE bill_number = %s FOR UPDATE;", (payload.bill_number,))
         invoice = cursor.fetchone()
         if not invoice:
             raise HTTPException(status_code=404, detail="Target billing routing node not found")
@@ -164,15 +179,18 @@ def execute_invoice_payment(payload: PayInvoicePayload, token_data: dict = Depen
             raise HTTPException(status_code=400, detail="Invoice has already been settled")
         biller_name = str(invoice[0])
         bill_amount = float(invoice[1])
-        cursor.execute("SELECT balance FROM Accounts WHERE account_id = %s FOR UPDATE;", (payload.account_id,))
+        cursor.execute("SELECT balance FROM accounts WHERE account_id = %s FOR UPDATE;", (payload.account_id,))
         account = cursor.fetchone()
         if not account or float(account[0]) < bill_amount:
             raise HTTPException(status_code=400, detail="Insufficient capital deployment assets")
-        cursor.execute("UPDATE Accounts SET balance = balance - %s WHERE account_id = %s;", (bill_amount, payload.account_id))
-        cursor.execute("UPDATE Invoices SET status = 'Paid' WHERE bill_number = %s;", (payload.bill_number,))
+        cursor.execute("UPDATE accounts SET balance = balance - %s WHERE account_id = %s;", (bill_amount, payload.account_id))
+        cursor.execute("UPDATE invoices SET status = 'Paid' WHERE bill_number = %s;", (payload.bill_number,))
         connection.commit()
         cursor.close()
         return {"status": "Success", "message": f"Successfully settled {biller_name} bill", "amount_paid": bill_amount}
+    except HTTPException:
+        if connection: connection.rollback()
+        raise
     except Exception as e:
         if connection: connection.rollback()
         raise HTTPException(status_code=500, detail=f"Billing transaction rollback: {str(e)}")
