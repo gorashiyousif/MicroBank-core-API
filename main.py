@@ -11,8 +11,8 @@ from typing import Optional, List
 
 # [FIXED PROPERLY]: إعادة تفعيل الـ وثائق الافتراضية وربطها بالستارة الفخمة منعاً لتعديل الـ CV
 app = FastAPI(
-    title="MicroBank Core & Automated Billing Ecosystem", 
-    version="2026.1.0",
+    title="MicroBank Core, Automated Billing & AML RegTech Ecosystem", 
+    version="2026.2.0",
     docs_url="/secure-panel-ops",  # نقل اللوحة الداخلية لمسار مخفي ومأمن بالكامل
     redoc_url=None
 )
@@ -59,7 +59,11 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security_sc
 
 @app.get("/")
 def read_root():
-    return {"status": "Active", "system": "MicroBank Core Web API", "engineer": "Gorashi Yousif"}
+    return {
+        "status": "Active", 
+        "system": "MicroBank Core, Billing & Real-Time AML Engine", 
+        "engineer": "Gorashi Yousif"
+    }
 
 @app.post("/deposit")
 def execute_deposit(payload: DepositPayload):
@@ -113,16 +117,22 @@ def get_balance(account_id: int):
     finally:
         if connection: connection.close()
 
-@app.post("/transfer")
+        @app.post("/transfer")
 def execute_transfer(payload: TransferPayload, token_data: dict = Depends(verify_token)):
     if payload.sender_id != token_data.get("account_id"):
         raise HTTPException(status_code=403, detail="Unauthorized footprint mutation scope")
-    if payload.amount <= 0:
-        raise HTTPException(status_code=400, detail="Transfer amount must be greater than zero")
-    connection = None
-    try:
-        connection = get_db_connection()
-        cursor = connection.cursor()
+    if payload.amount  20,000 SDG)
+        if payload.amount > 20000:
+            alert_msg = "High-value transaction exceeds 20,000 SDG automated threshold"
+            cursor.execute(
+                "INSERT INTO aml_alerts (sender_id, receiver_id, amount, alert_reason, status) VALUES (%s, %s, %s, %s, 'Flagged for Review');",
+                (payload.sender_id, payload.receiver_id, payload.amount, alert_msg)
+            )
+            connection.commit()
+            cursor.close()
+            raise HTTPException(status_code=403, detail=f"AML Hold: {alert_msg}")
+
+        # 3. Core Ledger Atomic Transfer Execution
         cursor.execute("SELECT balance FROM accounts WHERE account_id = %s FOR UPDATE;", (payload.sender_id,))
         sender = cursor.fetchone()
         if not sender or float(sender[0]) < payload.amount:
@@ -131,9 +141,8 @@ def execute_transfer(payload: TransferPayload, token_data: dict = Depends(verify
         cursor.execute("UPDATE accounts SET balance = balance + %s WHERE account_id = %s;", (payload.amount, payload.receiver_id))
         connection.commit()
         cursor.close()
-        return {"status": "Success", "message": "Atomic asset mutation broadcasted successfully"}
+        return {"status": "Success", "message": "Atomic asset mutation cleared AML screening & broadcasted"}
     except HTTPException:
-        if connection: connection.rollback()
         raise
     except Exception as e:
         if connection: connection.rollback()
@@ -194,6 +203,32 @@ def execute_invoice_payment(payload: PayInvoicePayload, token_data: dict = Depen
     except Exception as e:
         if connection: connection.rollback()
         raise HTTPException(status_code=500, detail=f"Billing transaction rollback: {str(e)}")
+    finally:
+        if connection: connection.close()
+
+@app.get("/aml/alerts", tags=["RegTech & AML Compliance Engine"])
+def get_aml_alerts(token_data: dict = Depends(verify_token)):
+    connection = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT alert_id, sender_id, receiver_id, amount, alert_reason, status, created_at FROM aml_alerts ORDER BY created_at DESC;")
+        alerts = cursor.fetchall()
+        cursor.close()
+        result = []
+        for a in alerts:
+            result.append({
+                "alert_id": int(a[0]),
+                "sender_id": int(a[1]),
+                "receiver_id": int(a[2]),
+                "amount": float(a[3]),
+                "alert_reason": str(a[4]),
+                "status": str(a[5]),
+                "timestamp": str(a[6])
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AML Ledger Error: {str(e)}")
     finally:
         if connection: connection.close()
 
