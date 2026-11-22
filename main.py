@@ -138,6 +138,15 @@ def execute_transfer(payload: TransferPayload, token_data: dict = Depends(verify
             connection.commit()
             cursor.close()
             raise HTTPException(status_code=403, detail=f"AML Compliance Block: {alert_msg}")
+        if payload.amount > 20000:
+            alert_msg = "High-value transaction exceeds 20,000 SDG automated threshold"
+            cursor.execute(
+                "INSERT INTO aml_alerts (sender_id, receiver_id, amount, alert_reason, status) VALUES (%s, %s, %s, %s, 'Flagged for Review');",
+                (payload.sender_id, payload.receiver_id, payload.amount, alert_msg)
+            )
+            connection.commit()
+            cursor.close()
+            raise HTTPException(status_code=403, detail=f"AML Hold: {alert_msg}")
 
         # 3. Core Ledger Atomic Transfer Execution
         cursor.execute("SELECT balance FROM accounts WHERE account_id = %s FOR UPDATE;", (payload.sender_id,))
