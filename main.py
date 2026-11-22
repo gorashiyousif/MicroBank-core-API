@@ -117,20 +117,27 @@ def get_balance(account_id: int):
     finally:
         if connection: connection.close()
 
-        @app.post("/transfer")
+@app.post("/transfer")
 def execute_transfer(payload: TransferPayload, token_data: dict = Depends(verify_token)):
     if payload.sender_id != token_data.get("account_id"):
         raise HTTPException(status_code=403, detail="Unauthorized footprint mutation scope")
-    if payload.amount  20,000 SDG)
-        if payload.amount > 20000:
-            alert_msg = "High-value transaction exceeds 20,000 SDG automated threshold"
+    if payload.amount <= 0:
+        raise HTTPException(status_code=400, detail="Transfer amount must be greater than zero")
+    connection = None
+    try:
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        cursor.execute("SELECT reason FROM blacklist WHERE account_id = %s;", (payload.receiver_id,))
+        blacklisted = cursor.fetchone()
+        if blacklisted:
+            alert_msg = f"Blocked transfer to blacklisted entity ({blacklisted})"
             cursor.execute(
-                "INSERT INTO aml_alerts (sender_id, receiver_id, amount, alert_reason, status) VALUES (%s, %s, %s, %s, 'Flagged for Review');",
+                "INSERT INTO aml_alerts (sender_id, receiver_id, amount, alert_reason, status) VALUES (%s, %s, %s, %s, 'Blocked');",
                 (payload.sender_id, payload.receiver_id, payload.amount, alert_msg)
             )
             connection.commit()
             cursor.close()
-            raise HTTPException(status_code=403, detail=f"AML Hold: {alert_msg}")
+            raise HTTPException(status_code=403, detail=f"AML Compliance Block: {alert_msg}")
 
         # 3. Core Ledger Atomic Transfer Execution
         cursor.execute("SELECT balance FROM accounts WHERE account_id = %s FOR UPDATE;", (payload.sender_id,))
